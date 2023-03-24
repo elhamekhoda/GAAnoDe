@@ -1,5 +1,5 @@
 <!-- # Generative Algorithm for Anomaly Detection (GAAnoDe) -->
-# Generative Algorithm for dEtecting Anomolies (GAEA)
+# Generative Algorithm for dEtecting Anomalies (GAEA)
 
 This repository contains the training code for VAE and GAN-based algorithms.
 
