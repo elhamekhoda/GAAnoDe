@@ -1,6 +1,17 @@
+
+
+## output directory
 outputs/
+
+## local data directory
 data/
+
+#local python cache 
 __pycache__
 .ipynb_checkpoints
-./*.h5
+
+#raw data files
+events_anomalydetection_qcd_extra_inneronly_features.h5
+events_anomalydetection_v2.features.h5
+
 *~
