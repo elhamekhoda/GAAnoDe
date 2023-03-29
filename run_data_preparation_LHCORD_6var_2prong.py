@@ -18,10 +18,10 @@ if not os.path.exists(args.outdir):
     os.makedirs(args.outdir)
 
 # the "data" containing too much signal
-features=pd.read_hdf("../data/events_anomalydetection_v2.features.h5")
+features=pd.read_hdf("events_anomalydetection_v2.features.h5")
 
 # additionally produced bkg
-features_extrabkg = pd.read_hdf("../data/events_anomalydetection_qcd_extra_inneronly_features.h5")
+features_extrabkg = pd.read_hdf("events_anomalydetection_qcd_extra_inneronly_features.h5")
 
 ## to be split among the different sets 
 features_extrabkg1 = features_extrabkg[:312858]
@@ -143,8 +143,8 @@ innermask_extrabkg2 = (dataset_extrabkg2[:,0]>minmass) & (dataset_extrabkg2[:,0]
 innerdata_extrabkg2 = dataset_extrabkg2[innermask_extrabkg2]
 
 
-outerdata_train = outerdata[:500000]
-outerdata_val = outerdata[500000:]
+outerdata_train = outerdata[:850000]
+outerdata_val = outerdata[850000:]
 
 innerdata_train = innerdata[:60000]
 innerdata_val = innerdata[60000:120000]
