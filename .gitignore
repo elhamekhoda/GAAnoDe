@@ -14,4 +14,9 @@ __pycache__
 events_anomalydetection_qcd_extra_inneronly_features.h5
 events_anomalydetection_v2.features.h5
 
+#local wandb
+wandb/
+
 *~
+
+
