@@ -6,6 +6,7 @@ import pandas as pd
 from tqdm import tqdm
 
 import tensorflow as tf
+from tensorflow.keras.models import save_model
 from tensorflow import keras
 from tensorflow.python.framework.ops import disable_eager_execution
 from tensorflow.keras import backend as K
@@ -23,34 +24,23 @@ from utils import *
 
 #setup wandb configs
 configs = dict(
-        learning_rate = 0.0025, 
-        beta = 0.001,
-        cond_beta = 0.0001,
+        learning_rate = 0.001, 
+        beta = 0.01,
         batch_size = 512,
         latent_dim = 6,
         epochs = 100, 
         layer_dims = [32, 128, 128, 32]
 )
 
-sweep_configuration = {
-    'method': 'random',
-    'name': 'sweep',
-    'metric': {'goal': 'minimize', 'name': 'epoch_loss'},
-    'parameters': 
-    {
-        'learning_rate': {'max': 0.003, 'min': 0.0009},
-        'beta': {'max': 0.007, 'min': 0.001}, 
-        'cond_beta': {'max': 0.001, 'min': 0.0001}
-        #'learning_rate': {'max': 0.0014, 'min': 0.0009},
-        # 'beta': {'max': 0.1, 'min': 0.01}, 
-        # 'layer_dims': {'values': [[32, 128, 128, 32], [64, 256, 256, 64], [128, 512, 512, 128], [64, 128, 256, 256, 128, 64], [32, 64, 128, 256, 128, 64, 32], [32, 64, 128, 256, 512, 256, 128, 64, 32]]}
-        # 'layer_dims': {'values': [[32, 64, 32], [32, 128, 128, 32], [64, 256, 256, 64], [128, 512, 512, 128]]}
-     }
-}
+run_name = 'run7_minmax_scaling'
 
-run_name = 'no_scaling_new_loss'
-
-sweep_id = wandb.sweep(sweep=sweep_configuration, project='anomoly_detection_new_loss')
+wandb.init(project='anomoly_detection', config=configs, job_type='train')
+wandb.run.name = run_name
+config = wandb.config
+wandb_callback = WandbCallback(monitor='val_loss',
+                                   log_weights=True,
+                                   log_evaluation=True,
+                                   validation_steps=5)
 
 #setup GPU env
 disable_eager_execution()
@@ -106,7 +96,7 @@ y_train = y_train.astype('float32')
 y_test = y_test.astype('float32')
 
 #define saving folder
-folder_name = "cVAEz6_04-13-2023_" + run_name + "/"
+folder_name = "cVAEz6_04-05-2023_" + run_name + "/"
 comd = "mkdir -p "+"./outputs/models/"+folder_name
 os.system(comd)
 
@@ -162,16 +152,37 @@ def create_decoder(z,y, layer_dims):
     outputs = Dense(input_dim, activation='linear')(x)
     return Model([z, y], outputs, name='decoder')
 
+def mse_loss_fn(x,  x_decoded_mean):
+    mse_loss = tf.reduce_mean(tf.reduce_sum(keras.losses.mse(x, x_decoded_mean)))
+    return mse_loss
+    
+def kl_loss_fn(x,  x_decoded_mean):
+    kl_loss = 1 + z_log_var - K.square(z_mean) - K.exp(z_log_var)
+    kl_loss = K.sum(kl_loss, axis=-1)
+    kl_loss *= -0.5
+    return kl_loss
+
+def vae_loss(x, x_decoded_mean):
+    mse_loss = mse_loss_fn(x, x_decoded_mean)
+    kl_loss = 1 + z_log_var - K.square(z_mean) - K.exp(z_log_var)
+    kl_loss = K.sum(kl_loss, axis=-1)
+    kl_loss *= -0.5
+    loss = K.mean((1-config.beta)*mse_loss + config.beta*kl_loss)
+    return loss
+
 encoder_artifact = wandb.Artifact('encoder', type='model')
 decoder_artifact = wandb.Artifact('decoder', type='model')
+
 
 class CustomSaver(Callback):
     def on_epoch_end(self, epoch, logs={}):
         if (k == (iterations-1)):
-            decoder.save("outputs/models/{}/model_cbvae_6var_m{}.h5".format(folder_name,epoch))
-            encoder.save("outputs/models/{}/encoder_cbvae_6var_m{}.h5".format(folder_name,epoch))
+            # decoder.save("outputs/models/{}/model_cbvae_6var_m{}.h5".format(folder_name,epoch))
+            # encoder.save("outputs/models/{}/encoder_cbvae_6var_m{}.h5".format(folder_name,epoch))
+            save_model(decoder, "outputs/models/{}/model_cbvae_6var_m{}".format(folder_name,epoch))
+            save_model(encoder, "outputs/models/{}/encoder_cbvae_6var_m{}".format(folder_name,epoch))
             decoder_artifact.add_file("outputs/models/{}/model_cbvae_6var_m{}.h5".format(folder_name,epoch))
-            encoder_artifact.add_file("outputs/models/{}/encoder_cbvae_6var_m{}.h5".format(folder_name,epoch))    
+            encoder_artifact.add_file("outputs/models/{}/encoder_cbvae_6var_m{}.h5".format(folder_name,epoch))
                 
 decoderSaver = CustomSaver()
 iterations = 3
@@ -187,64 +198,33 @@ class LossLogger(Callback):
             logs['epoch_loss'] = epoch_loss
             wandb.log({"loss": epoch_loss})
             
-def run_cvae():
-    with wandb.init(config=configs) as run:
-        #wandb.init(config=configs)
-        config = wandb.config
-        wandb_callback = WandbCallback(monitor='val_loss',
-                                   log_weights=True,
-                                   log_evaluation=True,
-                                   validation_steps=5)
-        epochs = config.epochs
-        learnrate = config.learning_rate
 
-        encoder = create_encoder(Input(shape=(input_dim,)), Input(shape=(1,)), config.latent_dim, config.layer_dims)
-        decoder = create_decoder(Input(shape=(config.latent_dim,)), Input(shape=(1,)), config.layer_dims)
+run = wandb.init(project='anomoly_detection', config=configs, job_type='train')
 
-        # cvae.compile(optimizer=opt, loss=vae_loss)
-        X_input = Input(shape=(input_dim,))
-        y_input = Input(shape=(1,))
-        z_mean, z_log_var, z = encoder([X_input,y_input])
-        outputs = decoder([z,y_input])
-        cvae = Model([X_input, y_input], outputs)
+epochs = config.epochs
+learnrate = config.learning_rate
+encoder = create_encoder(Input(shape=(input_dim,)), Input(shape=(1,)), config.latent_dim, config.layer_dims)
+decoder = create_decoder(Input(shape=(config.latent_dim,)), Input(shape=(1,)), config.layer_dims)
+# cvae.compile(optimizer=opt, loss=vae_loss)
+X_input = Input(shape=(input_dim,))
+y_input = Input(shape=(1,))
+z_mean, z_log_var, z = encoder([X_input,y_input])
+outputs = decoder([z,y_input])
+cvae = Model([X_input, y_input], outputs)
+opt = Adam(learning_rate=learnrate, beta_1=0.9, beta_2=0.999, epsilon=1e-08, decay=0.0)
+checkpointer = ModelCheckpoint(filepath='outputs/models/%s/cbvae_LHCO2020_20d_e-6.hdf5'%(folder_name), verbose=1, save_best_only=True)
+opt = Adam(learning_rate=learnrate, beta_1=0.9, beta_2=0.999, epsilon=1e-08, decay=0.0)
+# tf.keras.backend.clear_session()
+cvae.compile(loss=vae_loss, optimizer=opt, metrics=[mse_loss_fn, kl_loss_fn])
+cvae.fit([x_train, y_train], x_train,
+        epochs=epochs,
+        batch_size=config.batch_size,
+        validation_data=([x_test, y_test], x_test),
+        callbacks = [checkpointer, history, decoderSaver, wandb_callback, LossLogger()])
 
-
-        def mse_loss_fn(x,  x_decoded_mean):
-            mse_loss = tf.reduce_mean(tf.reduce_sum(keras.losses.mse(x, x_decoded_mean)))
-            return mse_loss
+run.log_artifact(encoder_artifact)
+run.log_artifact(decoder_artifact)
     
-        def kl_loss_fn(x,  x_decoded_mean):
-            kl_loss = 1 + z_log_var - K.square(z_mean) - K.exp(z_log_var)
-            kl_loss = K.sum(kl_loss, axis=-1)
-            kl_loss *= -0.5
-            return kl_loss
-
-        def vae_loss(x, x_decoded_mean):
-            mse_loss = mse_loss_fn(x, x_decoded_mean)
-            kl_loss = 1 + z_log_var - K.square(z_mean) - K.exp(z_log_var)
-            kl_loss = K.sum(kl_loss, axis=-1)
-            kl_loss *= -0.5
-            cond_loss = mse_loss_fn(y_input, z_mean)
-            loss = K.mean((1-config.beta-config.cond_beta)*mse_loss + config.beta*kl_loss + config.cond_beta*cond_loss)
-            return loss
-
-        opt = Adam(learning_rate=learnrate, beta_1=0.9, beta_2=0.999, epsilon=1e-08, decay=0.0)
-        checkpointer = ModelCheckpoint(filepath='outputs/models/%s/cbvae_LHCO2020_20d_e-6.hdf5'%(folder_name), verbose=1, save_best_only=True)
-        opt = Adam(learning_rate=learnrate, beta_1=0.9, beta_2=0.999, epsilon=1e-08, decay=0.0)
+cvae.load_weights('outputs/models/%s/cbvae_LHCO2020_20d_e-6.hdf5'%(folder_name))
         
-        # tf.keras.backend.clear_session()
-        cvae.compile(loss=vae_loss, optimizer=opt, metrics=[mse_loss_fn, kl_loss_fn])
-        cvae.fit([x_train, y_train], x_train,
-                epochs=epochs,
-                batch_size=config.batch_size,
-                validation_data=([x_test, y_test], x_test),
-                callbacks = [checkpointer, history, decoderSaver, wandb_callback, LossLogger()])
-        
-        run.log_artifact(encoder_artifact)
-        run.log_artifact(decoder_artifact)
-        
-        cvae.load_weights('outputs/models/%s/cbvae_LHCO2020_20d_e-6.hdf5'%(folder_name))
-        
-
-        
-wandb.agent(sweep_id, function=run_cvae, count=20)
+wandb.finish()
