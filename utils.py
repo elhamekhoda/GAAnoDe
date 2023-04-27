@@ -25,9 +25,9 @@ import numpy as np
 
 #     return data, cond_data
 
-def minmax_norm_data(six_feature_data):
-    data = six_feature_data 
+def minmax_norm_data(indata):
     delta_shift = 1.0e-3
+    data = indata.copy()
     nFeat = 6
     x_max = np.empty(nFeat)
     x_min = np.empty(nFeat)
@@ -42,14 +42,15 @@ def minmax_norm_data(six_feature_data):
     return data, x_max, x_min
 
 # this function is used to do standard normalization on the data
-def standard_norm_data(six_feature_data):
-    data = six_feature_data
+def standard_norm_data(indata):
+    data = indata.copy()
     scaler = StandardScaler()
     data = scaler.fit_transform(data)
     return data, scaler
 
 # min max normalization on conditional data
-def minmax_norm_cond_data(cond_data):
+def minmax_norm_cond_data(in_cond_data):
+    cond_data = in_cond_data.copy()
     delta_shift = 1.0e-3
     cond_max = np.max(cond_data)
     cond_min = np.min(cond_data)
@@ -60,33 +61,36 @@ def minmax_norm_cond_data(cond_data):
     return cond_data, cond_max, cond_min
 
 # this function is used to do standard normalization on the conditional data
-def standard_norm_cond_data(cond_data):
+def standard_norm_cond_data(in_cond_data):
+    cond_data = in_cond_data.copy()
     scaler = StandardScaler()
     cond_data = np.reshape(cond_data, [-1, 1])
     cond_data = scaler.fit_transform(cond_data)
     return cond_data, scaler
 
 # this function is used to do logit normalization on the data. for both data and conditional data.
-def logit_norm(data):
+def logit_norm(indata):
+    data = indata.copy()
     data = logit(data)
     return data
 
 # this function is used to do expit normalization on the data. for both data and conditional data
-def expit_norm(data):
+def expit_norm(indata):
+    data = indata.copy()
     data = expit(data)
     return data
 
 # this fucntion does reverse min max normalization on the data
-def rev_minmax_data(new_data, old_data_min, old_data_max):
+def rev_minmax_data(indata, old_data_min, old_data_max):
     delta_shift = 1.0e-3
-    data = new_data
+    data = indata.copy()
     for i in range(0,data.shape[1]):
         data[:,i] = (data[:,i] * ((old_data_max[i]-old_data_min[i]) + 2*delta_shift)) - delta_shift + old_data_min[i]
     return data
 
-def rev_minmax_cond_data(new_data, old_data_min, old_data_max):
+def rev_minmax_cond_data(indata, old_data_min, old_data_max):
+    data = indata.copy()
     delta_shift = 1.0e-3
-    data = new_data
     data = (data * ((old_data_max-old_data_min) + 2*delta_shift)) - delta_shift + old_data_min
     return data
 
@@ -103,9 +107,7 @@ def quick_logit(x):
     return logit
 
 def logit_transform_inverse(data, datamax, datamin):
-    
     dataout = (datamin + datamax*np.exp(data))/(1 + np.exp(data))
-
     return dataout
 
 
